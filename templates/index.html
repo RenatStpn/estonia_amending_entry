@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estonia Company Finder</title>
+<style>
+  :root {
+    --blue: #1b4f8c;
+    --border: #d6dde3;
+    --bg: #f5f7f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: #1c1c1c;
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  p.subtitle { color: #566; margin-top: 0; margin-bottom: 1.5rem; }
+  form {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; color: #333; }
+  input[type=date], input[type=number], select {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem; }
+  fieldset legend { font-size: 0.85rem; font-weight: 600; padding: 0 0.3rem; }
+  .checkbox-group { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .checkbox-group label { display: flex; align-items: center; gap: 0.35rem; font-weight: 400; margin: 0; }
+  .checkbox-group input { width: auto; }
+  button {
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.65rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:hover { background: #163f70; }
+  .hint { font-size: 0.8rem; color: #778; margin-top: 0.5rem; }
+  .error {
+    background: #fdecea; border: 1px solid #f3c2bd; color: #8a2c22;
+    padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1.5rem;
+  }
+  .summary {
+    background: #eaf2ff; border: 1px solid #c3d9f6; color: #1b4f8c;
+    padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.92rem;
+  }
+  .log {
+    background: #101418; color: #b7f7c1; font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem; padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1rem;
+    max-height: 180px; overflow-y: auto; white-space: pre-wrap;
+  }
+  table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; background: white; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { background: #eef2f5; }
+  tr:hover td { background: #fafcfe; }
+  .download-btn { display: inline-block; margin-top: 1rem; text-decoration: none; }
+  .download-btn button { background: #1f8c4d; }
+  .download-btn button:hover { background: #146637; }
+  .results-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Estonia Company Finder</h1>
+  <p class="subtitle">Find OÜ / UÜ / TÜ / AS companies with an Amending entry in a chosen period, filtered by yearly revenue.</p>
+
+  <form method="post" action="/search">
+    <div class="row">
+      <div>
+        <label for="start_date">Start of period</label>
+        <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+      </div>
+      <div>
+        <label for="end_date">End of period</label>
+        <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <fieldset>
+          <legend>Legal form</legend>
+          <div class="checkbox-group">
+            {% for lf in legal_forms %}
+            <label><input type="checkbox" name="legal_forms" value="{{ lf }}" {% if lf in selected_forms %}checked{% endif %}> {{ lf }}</label>
+            {% endfor %}
+          </div>
+        </fieldset>
+      </div>
+      <div>
+        <label for="year">Annual report year (for revenue)</label>
+        <select id="year" name="year">
+          {% for y in years %}
+          <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="min_revenue">Minimum yearly revenue (EUR)</label>
+        <input type="number" id="min_revenue" name="min_revenue" min="0" step="1" placeholder="0" value="{{ min_revenue }}">
+      </div>
+      <div>
+        <label for="max_revenue">Maximum yearly revenue (EUR)</label>
+        <input type="number" id="max_revenue" name="max_revenue" min="0" step="1" placeholder="no limit" value="{{ max_revenue }}">
+      </div>
+    </div>
+
+    <button type="submit">Search</button>
+    <p class="hint">
+      Type of entry is fixed to "Amending entry". Revenue comes from the e-Business Register's open annual-report
+      data for the selected year — companies that haven't filed a report for that year won't have a revenue figure
+      and are excluded. Reference data (~500&nbsp;MB) is downloaded once and cached in <code>data/</code>; the first
+      search for a given year takes longer. Large date ranges can take a while — progress prints below and in the terminal.
+    </p>
+  </form>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if summary %}
+  <div class="summary">{{ summary }}</div>
+  {% endif %}
+
+  {% if log %}
+  <div class="log">{% for line in log %}{{ line }}
+{% endfor %}</div>
+  {% endif %}
+
+  {% if results is not none %}
+    {% if results %}
+    <a class="download-btn" href="/download/{{ download_token }}"><button type="button">Download Excel</button></a>
+    <div class="results-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Company name</th>
+          <th>Registry code</th>
+          <th>Revenue {{ selected_year }} (EUR)</th>
+          <th>Amending entry date</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td>{{ r.company_name }}</td>
+          <td>{{ r.registry_code }}</td>
+          <td>{{ "{:,.0f}".format(r.revenue) }}</td>
+          <td>{{ r.entry_date }}</td>
+          <td>{{ r.status }}</td>
+          <td><a href="{{ r.url }}" target="_blank" rel="noopener">view</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="summary">No companies matched all the chosen filters.</div>
+    {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

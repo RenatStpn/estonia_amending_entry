@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Generated datasets and search exports
+data/
+output/
+*.xlsx
+
+# Local environment files
+.env
+.DS_Store
