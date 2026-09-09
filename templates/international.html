@@ -21,8 +21,22 @@
   .wrap { max-width: 900px; margin: 0 auto; }
   h1 { font-size: 1.4rem; margin-bottom: 0.1rem; }
   .reg-code { color: #566; font-size: 0.95rem; margin-top: 0; margin-bottom: 1.5rem; }
-  .back-link { display: inline-block; margin-bottom: 1rem; color: var(--blue); text-decoration: none; font-size: 0.9rem; }
-  .back-link:hover { text-decoration: underline; }
+  .link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.32rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .link-btn--ghost { background: white; color: #445; }
+  .link-btn--ghost:hover { background: #eef2f5; border-color: #b9c3cc; }
+  .back-link { display: inline-flex; margin-bottom: 1rem; color: var(--blue); }
   .card {
     background: white;
     border: 1px solid var(--border);
@@ -47,12 +61,11 @@
   .forecast-col { color: #8892a0; font-style: italic; }
   .results-wrap { overflow-x: auto; }
   .source { font-size: 0.8rem; color: #778; margin-top: 1rem; }
-  .source a { color: var(--blue); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="{{ '/results/' + back_token if back_token else '/' }}">&larr; Back to search results</a>
+  <a class="link-btn link-btn--ghost back-link" href="{{ '/results/' + back_token if back_token else '/' }}">&larr; Back to search results</a>
   <h1>{{ company_name or "Company" }}</h1>
   <p class="reg-code">Registry code: {{ registry_code }} &middot; International revenue check via ssb.ee</p>
 
@@ -80,7 +93,7 @@
       </thead>
       <tbody>
         {% for row in data.rows %}
-        <tr class="{{ 'total' if row.title in ('Müük kokku',) else '' }}{{ 'export' if row.title in ('Eksport kokku',) else '' }}">
+        <tr class="{{ 'total' if row.title_et == 'Müük kokku' else '' }}{{ 'export' if row.title_et == 'Eksport kokku' else '' }}">
           <td>{{ row.title }}</td>
           {% for y in data.years %}
           <td class="{{ 'forecast-col' if y == data.forecast_year else '' }}">
@@ -96,7 +109,7 @@
       </tbody>
     </table>
     </div>
-    <p class="source">Source: <a href="{{ data.source_url }}" target="_blank" rel="noopener">ssb.ee</a></p>
+    <p class="source">Source: <a class="link-btn link-btn--ghost" href="{{ data.source_url }}" target="_blank" rel="noopener">ssb.ee ↗</a></p>
   </div>
   {% endif %}
 </div>

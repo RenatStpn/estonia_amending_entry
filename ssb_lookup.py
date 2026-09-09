@@ -12,6 +12,8 @@ import json
 
 import requests
 
+from country_names import translate as translate_country_name
+
 SSB_AJAX_URL = "https://ssb.ee/wp-admin/admin-ajax.php"
 USER_AGENT = "Mozilla/5.0 (compatible; EstoniaCompanyFinder/1.0)"
 
@@ -95,9 +97,13 @@ def get_international_revenue(registry_code):
     rows = []
     for group in tcontent:
         for row in group:
-            title = row.get("0", "")
+            title_et = row.get("0", "")
             by_year = {int(k): v for k, v in row.items() if k != "0"}
-            rows.append({"title": title, "by_year": by_year})
+            rows.append({
+                "title": translate_country_name(title_et),
+                "title_et": title_et,
+                "by_year": by_year,
+            })
 
     if not rows:
         return None

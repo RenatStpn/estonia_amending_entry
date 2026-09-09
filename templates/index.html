@@ -78,6 +78,25 @@
   .download-btn button { background: #1f8c4d; }
   .download-btn button:hover { background: #146637; }
   .results-wrap { overflow-x: auto; }
+  .actions-cell { white-space: nowrap; }
+  .actions-cell .link-btn + .link-btn { margin-left: 0.4rem; }
+  .link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.32rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .link-btn--ghost { background: white; color: #445; }
+  .link-btn--ghost:hover { background: #eef2f5; border-color: #b9c3cc; }
+  .link-btn--accent { background: #eef2ff; color: #4338ca; border-color: #d9dcfa; }
+  .link-btn--accent:hover { background: #e1e4fc; border-color: #b9c0f7; }
 </style>
 </head>
 <body>
@@ -163,8 +182,7 @@
           <th>Revenue {{ selected_year }} (EUR)</th>
           <th>Amending entry date</th>
           <th>Status</th>
-          <th></th>
-          <th></th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -175,8 +193,10 @@
           <td>{{ "{:,.0f}".format(r.revenue) }}</td>
           <td>{{ r.entry_date }}</td>
           <td>{{ r.status }}</td>
-          <td><a href="{{ r.url }}" target="_blank" rel="noopener">view</a></td>
-          <td><a href="/international/{{ r.registry_code }}?name={{ r.company_name | urlencode }}{% if results_token %}&back={{ results_token }}{% endif %}">international revenue check</a></td>
+          <td class="actions-cell">
+            <a class="link-btn link-btn--ghost" href="{{ r.url }}" target="_blank" rel="noopener">Registry ↗</a>
+            <a class="link-btn link-btn--accent" href="/international/{{ r.registry_code }}?name={{ r.company_name | urlencode }}{% if results_token %}&back={{ results_token }}{% endif %}">🌐 International revenue</a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
