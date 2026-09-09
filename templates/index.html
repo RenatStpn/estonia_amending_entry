@@ -164,6 +164,7 @@
           <th>Amending entry date</th>
           <th>Status</th>
           <th></th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -175,6 +176,7 @@
           <td>{{ r.entry_date }}</td>
           <td>{{ r.status }}</td>
           <td><a href="{{ r.url }}" target="_blank" rel="noopener">view</a></td>
+          <td><a href="/international/{{ r.registry_code }}?name={{ r.company_name | urlencode }}" target="_blank" rel="noopener">international revenue check</a></td>
         </tr>
         {% endfor %}
       </tbody>

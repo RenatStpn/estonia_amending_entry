@@ -16,6 +16,7 @@ from flask import Flask, render_template, request, send_file
 
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from revenue_data import build_revenue_map, list_available_years
+from ssb_lookup import SsbLookupError, get_international_revenue
 
 app = Flask(__name__)
 
@@ -154,6 +155,30 @@ def search():
     )
 
 
+@app.route("/international/<registry_code>")
+def international(registry_code):
+    if not re.match(r"^\d{6,12}$", registry_code):
+        return "Invalid registry code", 400
+    company_name = request.args.get("name", "")
+
+    error = None
+    data = None
+    try:
+        data = get_international_revenue(registry_code)
+    except SsbLookupError as ex:
+        error = f"Could not fetch data from ssb.ee: {ex}"
+    except Exception as ex:
+        error = f"Unexpected error: {ex}"
+
+    return render_template(
+        "international.html",
+        registry_code=registry_code,
+        company_name=company_name,
+        data=data,
+        error=error,
+    )
+
+
 @app.route("/download/<token>")
 def download(token):
     if not re.match(r"^[a-f0-9]{32}$", token):
@@ -165,4 +190,4 @@ def download(token):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5050)
+    app.run(debug=False, port=5050, threaded=True)
