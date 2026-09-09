@@ -52,7 +52,7 @@
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="/">&larr; Back to search</a>
+  <a class="back-link" href="{{ '/results/' + back_token if back_token else '/' }}">&larr; Back to search results</a>
   <h1>{{ company_name or "Company" }}</h1>
   <p class="reg-code">Registry code: {{ registry_code }} &middot; International revenue check via ssb.ee</p>
 

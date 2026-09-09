@@ -8,11 +8,13 @@ then open http://127.0.0.1:5050
 """
 import os
 import re
+import threading
 import uuid
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-from flask import Flask, render_template, request, send_file
+from flask import Flask, redirect, render_template, request, send_file, url_for
 
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from revenue_data import build_revenue_map, list_available_years
@@ -25,6 +27,28 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 LEGAL_FORMS = list(LEGAL_FORM_VALUES.keys())  # AS, TÜ, UÜ, OÜ
 FALLBACK_YEARS = list(range(2019, date.today().year))
+
+# Keeps recent search results reachable by URL (so an "international revenue
+# check" link can send you back to the exact list you were looking at,
+# instead of a blank form) without needing a database. In-memory, capped so
+# it can't grow forever, and safe for the app's threaded dev server.
+RESULTS_STORE = OrderedDict()
+RESULTS_STORE_MAX = 50
+RESULTS_STORE_LOCK = threading.Lock()
+
+
+def _store_results(payload):
+    token = uuid.uuid4().hex
+    with RESULTS_STORE_LOCK:
+        RESULTS_STORE[token] = payload
+        while len(RESULTS_STORE) > RESULTS_STORE_MAX:
+            RESULTS_STORE.popitem(last=False)
+    return token
+
+
+def _get_results(token):
+    with RESULTS_STORE_LOCK:
+        return RESULTS_STORE.get(token)
 
 
 def _iso_to_estonian(date_str):
@@ -50,6 +74,7 @@ def index():
         summary=None,
         log=None,
         download_token=None,
+        results_token=None,
     )
 
 
@@ -137,6 +162,26 @@ def search():
     except Exception as ex:  # keep the simple UI alive with a readable message
         error = f"Unexpected error: {ex}"
 
+    if error is None:
+        # Post/Redirect/Get: park the results under a token so they have a
+        # stable URL to come back to (e.g. from an international revenue
+        # check) instead of only existing in this POST response.
+        token = _store_results({
+            "legal_forms": LEGAL_FORMS,
+            "selected_forms": selected_forms,
+            "start_date": start_date_iso,
+            "end_date": end_date_iso,
+            "years": years,
+            "selected_year": year,
+            "min_revenue": min_revenue_raw,
+            "max_revenue": max_revenue_raw,
+            "results": results,
+            "summary": summary,
+            "log": log,
+            "download_token": download_token,
+        })
+        return redirect(url_for("view_results", token=token))
+
     return render_template(
         "index.html",
         legal_forms=LEGAL_FORMS,
@@ -152,6 +197,20 @@ def search():
         summary=summary,
         log=log,
         download_token=download_token,
+        results_token=None,
+    )
+
+
+@app.route("/results/<token>")
+def view_results(token):
+    payload = _get_results(token)
+    if payload is None:
+        return redirect(url_for("index"))
+    return render_template(
+        "index.html",
+        error=None,
+        results_token=token,
+        **payload,
     )
 
 
@@ -160,6 +219,9 @@ def international(registry_code):
     if not re.match(r"^\d{6,12}$", registry_code):
         return "Invalid registry code", 400
     company_name = request.args.get("name", "")
+    back_token = request.args.get("back", "")
+    if not re.match(r"^[a-f0-9]{32}$", back_token):
+        back_token = None
 
     error = None
     data = None
@@ -176,6 +238,7 @@ def international(registry_code):
         company_name=company_name,
         data=data,
         error=error,
+        back_token=back_token,
     )
 
 
