@@ -17,7 +17,7 @@
 		<string>-o</string>
 		<string>ServerAliveInterval=30</string>
 		<string>-o</string>
-		<string>ServerAliveCountInterval=3</string>
+		<string>ServerAliveCountMax=3</string>
 		<string>-o</string>
 		<string>ExitOnForwardFailure=yes</string>
 		<string>-o</string>
