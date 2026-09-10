@@ -57,6 +57,13 @@ read -r -p "Press Enter once that line is saved on the VPS... " _
 # --- shared password ------------------------------------------------------
 read -r -p "Shared password for the app (blank = no password, not recommended for a public URL): " APP_PASSWORD
 APP_USERNAME="team"
+# Stable session-signing key so logins survive an app restart. Reuse the
+# existing one if the agent is already installed.
+EXISTING_PLIST="$LA/ee.estonia-scraper.app.plist"
+APP_SECRET_KEY="$(
+	[ -f "$EXISTING_PLIST" ] && /usr/bin/plutil -extract EnvironmentVariables.APP_SECRET_KEY raw "$EXISTING_PLIST" 2>/dev/null
+)"
+[ -n "$APP_SECRET_KEY" ] || APP_SECRET_KEY="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
 
 # --- render + load launchd agents ---------------------------------------
 render() {
@@ -66,6 +73,7 @@ render() {
 	    -e "s#__VPS_HOST__#${VPS_HOST}#g" \
 	    -e "s#__APP_USERNAME__#${APP_USERNAME}#g" \
 	    -e "s#__APP_PASSWORD__#${APP_PASSWORD}#g" \
+	    -e "s#__APP_SECRET_KEY__#${APP_SECRET_KEY}#g" \
 	    "$1"
 }
 

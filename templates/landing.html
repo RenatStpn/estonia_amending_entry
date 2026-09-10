@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estonia Company Finder</title>
+<meta name="description" content="Internal research tool for searching the Estonian e-Business Register for amending entries and checking company revenue. Access restricted to authorised team members.">
+<meta name="robots" content="noindex">
+<style>
+  :root { --blue:#1b4f8c; --border:#d6dde3; --bg:#f5f7f9; }
+  * { box-sizing:border-box; }
+  body {
+    font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg); color:#1c1c1c; margin:0;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:2rem 1rem;
+  }
+  .card {
+    background:#fff; border:1px solid var(--border); border-radius:12px;
+    padding:2.5rem; max-width:560px; width:100%;
+  }
+  h1 { font-size:1.5rem; margin:0 0 .25rem; }
+  .kicker { color:#667; font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; margin-bottom:1.25rem; }
+  p { line-height:1.55; color:#333; }
+  ul { line-height:1.6; color:#333; padding-left:1.2rem; }
+  .btn {
+    display:inline-block; margin-top:1rem; background:var(--blue); color:#fff;
+    text-decoration:none; padding:.7rem 1.6rem; border-radius:8px; font-weight:600;
+  }
+  .btn:hover { background:#163f70; }
+  .foot { margin-top:1.5rem; font-size:.8rem; color:#778; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="kicker">Internal research tool</div>
+    <h1>Estonia Company Finder</h1>
+    <p>
+      A small internal web app for company research against Estonia's official
+      <strong>e-Business Register</strong> (ariregister.rik.ee) and its public
+      open-data.
+    </p>
+    <p>It lets an authorised team member:</p>
+    <ul>
+      <li>search the e-Business Register for <strong>amending entries</strong> over a chosen period and legal form (OÜ, UÜ, TÜ, AS);</li>
+      <li>filter those companies by <strong>annual-report revenue</strong>;</li>
+      <li>look up a company's <strong>revenue by country</strong> (domestic vs. export).</li>
+    </ul>
+    <p>
+      Access is limited to team members with a shared login. There is no
+      sign-up, and no data is shared with third parties.
+    </p>
+    <a class="btn" href="/login">Sign in</a>
+    <div class="foot">Questions: contact the tool owner internally.</div>
+  </div>
+</body>
+</html>

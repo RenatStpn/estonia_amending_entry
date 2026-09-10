@@ -102,7 +102,10 @@
 <body>
 <div class="wrap">
   <h1>Estonia Company Finder</h1>
-  <p class="subtitle">Find OÜ / UÜ / TÜ / AS companies with an Amending entry in a chosen period, filtered by yearly revenue.</p>
+  <p class="subtitle">
+    Find OÜ / UÜ / TÜ / AS companies with an Amending entry in a chosen period, filtered by yearly revenue.
+    {% if session.get('authed') %}<a href="/logout" style="float:right;font-size:0.85rem;color:#1b4f8c;">Log out</a>{% endif %}
+  </p>
 
   <form method="post" action="/search">
     <div class="row">

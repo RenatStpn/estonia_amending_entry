@@ -9,13 +9,22 @@ then open http://127.0.0.1:5050
 import hmac
 import os
 import re
+import secrets
 import threading
 import uuid
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-from flask import Flask, Response, redirect, render_template, request, send_file, url_for
+from flask import (
+    Flask,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from revenue_data import build_revenue_map, list_available_years
@@ -24,29 +33,77 @@ from ssb_lookup import SsbLookupError, get_international_revenue
 app = Flask(__name__)
 
 # Optional shared-password protection for public/team deployments. When
-# APP_PASSWORD is set in the environment, every request needs HTTP Basic
-# auth with that password (username defaults to "team"). Unset = open,
-# which is fine for local use.
+# APP_PASSWORD is set, the tool sits behind a normal form login (session
+# cookie); the root URL still shows a public description page so it reads
+# as a real internal tool to link scanners, not a bare auth wall. Unset =
+# open, which is fine for local use.
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 APP_USERNAME = os.environ.get("APP_USERNAME", "team")
+# Stable across restarts if APP_SECRET_KEY is set (keeps sessions alive);
+# otherwise a per-process key — logins just don't survive an app restart.
+app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+# Endpoints reachable without logging in.
+_PUBLIC_ENDPOINTS = {"index", "login", "logout", "robots", "healthz", "static"}
+
+
+def _auth_required():
+    return bool(APP_PASSWORD)
+
+
+def _logged_in():
+    return session.get("authed") is True
 
 
 @app.before_request
-def _require_password():
-    if not APP_PASSWORD:
+def _gate():
+    if not _auth_required() or _logged_in():
         return None
-    auth = request.authorization
-    if (
-        auth
-        and hmac.compare_digest(auth.username or "", APP_USERNAME)
-        and hmac.compare_digest(auth.password or "", APP_PASSWORD)
-    ):
+    if request.endpoint in _PUBLIC_ENDPOINTS:
         return None
-    return Response(
-        "Authentication required.",
-        401,
-        {"WWW-Authenticate": 'Basic realm="Estonia Company Finder"'},
-    )
+    return redirect(url_for("login", next=request.full_path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not _auth_required() or _logged_in():
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if hmac.compare_digest(username, APP_USERNAME) and hmac.compare_digest(
+            password, APP_PASSWORD
+        ):
+            session["authed"] = True
+            session.permanent = True
+            nxt = request.form.get("next") or request.args.get("next") or ""
+            if not re.match(r"^/(results/|international/)", nxt):
+                nxt = url_for("index")
+            return redirect(nxt)
+        error = "Wrong username or password."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
+@app.route("/robots.txt")
+def robots():
+    return app.response_class("User-agent: *\nDisallow: /\n", mimetype="text/plain")
+
+
+@app.route("/healthz")
+def healthz():
+    return {"status": "ok"}
+
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -83,6 +140,10 @@ def _iso_to_estonian(date_str):
 
 @app.route("/", methods=["GET"])
 def index():
+    if _auth_required() and not _logged_in():
+        # Public description page — real content for link scanners, and a
+        # clear "what is this" for anyone (incl. IT) reviewing the domain.
+        return render_template("landing.html")
     today = date.today()
     years = list_available_years() or FALLBACK_YEARS
     return render_template(

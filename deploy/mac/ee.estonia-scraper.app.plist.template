@@ -20,6 +20,8 @@
 		<string>__APP_USERNAME__</string>
 		<key>APP_PASSWORD</key>
 		<string>__APP_PASSWORD__</string>
+		<key>APP_SECRET_KEY</key>
+		<string>__APP_SECRET_KEY__</string>
 	</dict>
 
 	<key>RunAtLoad</key>
