@@ -1,0 +1,15 @@
+# /etc/caddy/Caddyfile on the VPS.
+# Replace estonia.example.com with the subdomain you point at the VPS.
+# Caddy gets and renews the HTTPS certificate automatically (Let's Encrypt),
+# and forwards traffic to the reverse SSH tunnel coming from the Mac
+# (which listens on the VPS's own localhost:5050).
+
+estonia.example.com {
+	reverse_proxy 127.0.0.1:5050
+	encode gzip
+
+	# If the Mac / tunnel is down, say so clearly instead of a blank 502.
+	handle_errors {
+		respond "Estonia Company Finder is offline right now (the host machine or its tunnel is down). Try again shortly." 502
+	}
+}

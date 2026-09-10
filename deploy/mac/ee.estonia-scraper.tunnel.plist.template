@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ee.estonia-scraper.tunnel</string>
+
+	<!-- Outbound reverse SSH tunnel: the VPS's own localhost:5050 is
+	     forwarded to this Mac's localhost:5050, where Flask listens.
+	     autossh + launchd KeepAlive together keep it reconnected. -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>__AUTOSSH__</string>
+		<string>-M</string>
+		<string>0</string>
+		<string>-N</string>
+		<string>-o</string>
+		<string>ServerAliveInterval=30</string>
+		<string>-o</string>
+		<string>ServerAliveCountInterval=3</string>
+		<string>-o</string>
+		<string>ExitOnForwardFailure=yes</string>
+		<string>-o</string>
+		<string>StrictHostKeyChecking=accept-new</string>
+		<string>-i</string>
+		<string>__HOME__/.ssh/estonia_scraper_tunnel</string>
+		<string>-R</string>
+		<string>127.0.0.1:5050:127.0.0.1:5050</string>
+		<string>tunnel@__VPS_HOST__</string>
+	</array>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- Restart even if the very first connection fails fast. -->
+		<key>AUTOSSH_GATETIME</key>
+		<string>0</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+
+	<key>StandardOutPath</key>
+	<string>__PROJECT_DIR__/logs/tunnel.log</string>
+	<key>StandardErrorPath</key>
+	<string>__PROJECT_DIR__/logs/tunnel.log</string>
+</dict>
+</plist>

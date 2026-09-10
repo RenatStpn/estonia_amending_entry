@@ -16,3 +16,4 @@ output/
 # Local tunnel runtime artifacts (not code)
 cloudflared.log*
 tunnel_url.txt
+logs/

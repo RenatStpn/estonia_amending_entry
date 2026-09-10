@@ -6,6 +6,7 @@ Run with:
     python app.py
 then open http://127.0.0.1:5050
 """
+import hmac
 import os
 import re
 import threading
@@ -14,13 +15,38 @@ from collections import OrderedDict
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-from flask import Flask, redirect, render_template, request, send_file, url_for
+from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from revenue_data import build_revenue_map, list_available_years
 from ssb_lookup import SsbLookupError, get_international_revenue
 
 app = Flask(__name__)
+
+# Optional shared-password protection for public/team deployments. When
+# APP_PASSWORD is set in the environment, every request needs HTTP Basic
+# auth with that password (username defaults to "team"). Unset = open,
+# which is fine for local use.
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+APP_USERNAME = os.environ.get("APP_USERNAME", "team")
+
+
+@app.before_request
+def _require_password():
+    if not APP_PASSWORD:
+        return None
+    auth = request.authorization
+    if (
+        auth
+        and hmac.compare_digest(auth.username or "", APP_USERNAME)
+        and hmac.compare_digest(auth.password or "", APP_PASSWORD)
+    ):
+        return None
+    return Response(
+        "Authentication required.",
+        401,
+        {"WWW-Authenticate": 'Basic realm="Estonia Company Finder"'},
+    )
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
