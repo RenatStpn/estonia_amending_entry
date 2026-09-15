@@ -59,7 +59,7 @@ app.config.update(
 )
 
 # Endpoints reachable without logging in.
-_PUBLIC_ENDPOINTS = {"index", "login", "logout", "robots", "sitemap", "healthz", "static"}
+_PUBLIC_ENDPOINTS = {"index", "login", "logout", "robots", "sitemap", "llms_txt", "healthz", "static"}
 
 
 def _auth_required():
@@ -136,6 +136,40 @@ def sitemap():
         "</urlset>\n"
     )
     return app.response_class(xml, mimetype="application/xml")
+
+
+@app.route("/llms.txt")
+def llms_txt():
+    # llms.txt (llmstxt.org): a plain-language, machine-readable summary
+    # of the site for AI agents/crawlers, alongside robots.txt/sitemap.xml.
+    base = request.url_root.rstrip("/")
+    content = (
+        "# Estonia Company Finder\n\n"
+        "> Internal research tool for company lookups against Estonia's official "
+        "e-Business Register (ariregister.rik.ee) and its public open data, plus a "
+        "third-party by-country revenue check via ssb.ee.\n\n"
+        "This is a private, authenticated internal tool, not a public API or "
+        "dataset. Automated agents should not access it without authorization "
+        "from its owner.\n\n"
+        "## Pages\n\n"
+        f"- [About]({base}/): what this tool is and who it's for.\n"
+        f"- [Sitemap]({base}/sitemap.xml)\n"
+    )
+    return app.response_class(content, mimetype="text/plain")
+
+
+@app.after_request
+def _add_discovery_link_headers(response):
+    # RFC 8288 Link headers so crawlers/agents can find the sitemap and
+    # llms.txt without having to guess well-known paths.
+    base = request.url_root.rstrip("/")
+    links = [
+        f'<{base}/sitemap.xml>; rel="sitemap"',
+        f'<{base}/llms.txt>; rel="llms.txt"',
+    ]
+    existing = response.headers.get("Link")
+    response.headers["Link"] = ", ".join(([existing] if existing else []) + links)
+    return response
 
 
 @app.route("/healthz")
