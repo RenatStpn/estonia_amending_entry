@@ -26,6 +26,8 @@ from flask import (
     url_for,
 )
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from registry_contact import get_phones
 from revenue_data import build_revenue_map, list_available_years
@@ -36,6 +38,10 @@ from ssb_lookup import SsbLookupError, check_export_revenue_bulk, get_internatio
 ENRICHMENT_CAP = 400
 
 app = Flask(__name__)
+# Behind Caddy + the reverse SSH tunnel in production: trust its
+# X-Forwarded-Proto/Host so request.url_root (used by the sitemap) and
+# friends correctly come out as https://the-real-domain, not http://127.0.0.1.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Optional shared-password protection for public/team deployments. When
 # APP_PASSWORD is set, the tool sits behind a normal form login (session
@@ -53,7 +59,7 @@ app.config.update(
 )
 
 # Endpoints reachable without logging in.
-_PUBLIC_ENDPOINTS = {"index", "login", "logout", "robots", "healthz", "static"}
+_PUBLIC_ENDPOINTS = {"index", "login", "logout", "robots", "sitemap", "healthz", "static"}
 
 
 def _auth_required():
@@ -102,7 +108,34 @@ def logout():
 
 @app.route("/robots.txt")
 def robots():
-    return app.response_class("User-agent: *\nDisallow: /\n", mimetype="text/plain")
+    # Keep actual search results / company data / exports out of any
+    # crawl or index; the public landing page ("/") is fine to list.
+    lines = [
+        "User-agent: *",
+        "Disallow: /login",
+        "Disallow: /logout",
+        "Disallow: /search",
+        "Disallow: /results/",
+        "Disallow: /international/",
+        "Disallow: /download/",
+        "",
+        f"Sitemap: {url_for('sitemap', _external=True)}",
+        "",
+    ]
+    return app.response_class("\n".join(lines), mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <url>\n"
+        f"    <loc>{url_for('index', _external=True)}</loc>\n"
+        "  </url>\n"
+        "</urlset>\n"
+    )
+    return app.response_class(xml, mimetype="application/xml")
 
 
 @app.route("/healthz")
