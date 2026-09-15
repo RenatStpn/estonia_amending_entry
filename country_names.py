@@ -23,6 +23,9 @@ _MANUAL_OVERRIDES = {
     "Muud EU välised riigid": "Other non-EU countries",
     "Muud riigid": "Other countries",
     "Hollandi Antillid": "Netherlands Antilles",
+    # ssb.ee uses the everyday Estonian name for some countries rather
+    # than CLDR's formal one (CLDR has GB as "Ühendkuningriik").
+    "Suurbritannia": "United Kingdom",
 }
 
 
