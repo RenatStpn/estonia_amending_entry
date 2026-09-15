@@ -27,8 +27,13 @@ from flask import (
 )
 
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
+from registry_contact import get_phones
 from revenue_data import build_revenue_map, list_available_years
-from ssb_lookup import SsbLookupError, get_international_revenue
+from ssb_lookup import SsbLookupError, check_export_revenue_bulk, get_international_revenue
+
+# Cap on how many companies get the (slower, per-company) phone /
+# international-revenue enrichment, to keep a very broad search bounded.
+ENRICHMENT_CAP = 400
 
 app = Flask(__name__)
 
@@ -225,19 +230,56 @@ def search():
 
         results.sort(key=lambda r: r["revenue"], reverse=True)
 
+        # Phone number and international-revenue checks are per-company
+        # lookups against other sites, so cap how many results get them.
+        enrich_set = results[:ENRICHMENT_CAP]
+        enrich_note = ""
+        if enrich_set:
+            codes = [r["registry_code"] for r in enrich_set]
+
+            progress(f"Checking phone numbers for {len(codes)} companies...")
+            phones = get_phones(codes, progress_cb=progress)
+
+            progress(f"Checking international revenue for {len(codes)} companies (this can take a while)...")
+            intl_flags = check_export_revenue_bulk(codes, progress_cb=progress)
+
+            for r in enrich_set:
+                r["phone"] = phones.get(r["registry_code"])
+                r["has_international_revenue"] = intl_flags.get(r["registry_code"])
+
+            if len(results) > ENRICHMENT_CAP:
+                enrich_note = f" Phone/international-revenue checks limited to the top {ENRICHMENT_CAP} by revenue."
+        for r in results[ENRICHMENT_CAP:]:
+            r["phone"] = None
+            r["has_international_revenue"] = None
+
         summary = (
             f"{total_found} amending entries found in period"
             + (" (result set was capped — narrow the date range to see all of them)" if truncated else "")
             + f" → {len(unique_entries)} unique companies → {len(results)} within the chosen revenue range."
+            + enrich_note
         )
 
         if results:
-            df = pd.DataFrame(results)[
-                ["company_name", "registry_code", "revenue", "entry_date", "status", "url"]
+            export_rows = [
+                {
+                    **r,
+                    "phone_display": r["phone"] or "",
+                    "intl_display": (
+                        "Yes" if r["has_international_revenue"] is True
+                        else "No" if r["has_international_revenue"] is False
+                        else ""
+                    ),
+                }
+                for r in results
+            ]
+            df = pd.DataFrame(export_rows)[
+                ["company_name", "registry_code", "revenue", "entry_date", "status",
+                 "phone_display", "intl_display", "url"]
             ]
             df.columns = [
                 "Company name", "Registry code", f"Revenue {year} (EUR)",
-                "Amending entry date", "Status", "Register link",
+                "Amending entry date", "Status", "Phone", "Has international revenue", "Register link",
             ]
             download_token = uuid.uuid4().hex
             df.to_excel(os.path.join(OUTPUT_DIR, f"{download_token}.xlsx"), index=False)

@@ -9,6 +9,7 @@ same request a person clicking around the site would trigger.
 """
 import re
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -114,3 +115,45 @@ def get_international_revenue(registry_code):
         "rows": rows,
         "source_url": f"https://ssb.ee/{registry_code}-x/finantsid-varad-prognoosid",
     }
+
+
+def has_export_revenue(data):
+    """Given a get_international_revenue() result, returns True if the
+    company has ever reported non-Estonia ("Eksport kokku") revenue above
+    zero, False if it has the row but it's always zero, or None if there's
+    no export-revenue row to judge from at all."""
+    if not data:
+        return None
+    for row in data["rows"]:
+        if row["title_et"] == "Eksport kokku":
+            return any((v or 0) > 0 for v in row["by_year"].values())
+    return None
+
+
+def check_export_revenue_bulk(registry_codes, max_workers=5, progress_cb=None):
+    """Returns {registry_code: True/False/None} — whether each company has
+    ever reported revenue from outside Estonia. None means unknown (no
+    ssb.ee data for that company, or the lookup failed)."""
+    registry_codes = list(dict.fromkeys(registry_codes))
+    if not registry_codes:
+        return {}
+
+    def check_one(code):
+        try:
+            return has_export_revenue(get_international_revenue(code))
+        except SsbLookupError:
+            return None
+
+    results = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(check_one, code): code for code in registry_codes}
+        for future in as_completed(futures):
+            code = futures[future]
+            results[code] = future.result()
+            done += 1
+            if progress_cb and (done % 25 == 0 or done == len(registry_codes)):
+                progress_cb(
+                    f"Checked international revenue for {done}/{len(registry_codes)} companies..."
+                )
+    return results

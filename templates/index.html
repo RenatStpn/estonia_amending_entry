@@ -98,6 +98,21 @@
   .link-btn--ghost:hover { background: #eef2f5; border-color: #b9c3cc; }
   .link-btn--accent { background: #eef2ff; color: #4338ca; border-color: #d9dcfa; }
   .link-btn--accent:hover { background: #e1e4fc; border-color: #b9c0f7; }
+  .filter-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem;
+    margin-top: 1.25rem; padding: 0.8rem 1rem;
+    background: white; border: 1px solid var(--border); border-radius: 8px;
+  }
+  .filter-group { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .filter-label { font-size: 0.82rem; font-weight: 600; color: #445; margin-right: 0.15rem; }
+  .filter-btn {
+    background: white; color: #445; border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.8rem;
+    font-weight: 600; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .filter-btn:hover { background: #eef2f5; }
+  .filter-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+  .filter-count { font-size: 0.8rem; color: #778; margin-left: auto; }
 </style>
 </head>
 <body>
@@ -177,8 +192,24 @@
   {% if results is not none %}
     {% if results %}
     <a class="download-btn" href="/download/{{ download_token }}"><button type="button">Download Excel</button></a>
+
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">Phone:</span>
+        <button type="button" class="filter-btn active" data-filter="phone" data-value="all">All</button>
+        <button type="button" class="filter-btn" data-filter="phone" data-value="yes">With phone</button>
+        <button type="button" class="filter-btn" data-filter="phone" data-value="no">Without phone</button>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">International revenue:</span>
+        <button type="button" class="filter-btn active" data-filter="intl" data-value="all">All</button>
+        <button type="button" class="filter-btn" data-filter="intl" data-value="yes">Has international revenue</button>
+      </div>
+      <span id="filter-count" class="filter-count"></span>
+    </div>
+
     <div class="results-wrap">
-    <table>
+    <table id="results-table">
       <thead>
         <tr>
           <th>Company name</th>
@@ -186,17 +217,19 @@
           <th>Revenue {{ selected_year }} (EUR)</th>
           <th>Amending entry date</th>
           <th>Status</th>
+          <th>Phone</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in results %}
-        <tr>
+        <tr data-phone="{{ 'yes' if r.phone else 'no' }}" data-intl="{{ 'yes' if r.has_international_revenue is sameas true else ('no' if r.has_international_revenue is sameas false else 'unknown') }}">
           <td>{{ r.company_name }}</td>
           <td>{{ r.registry_code }}</td>
           <td>{{ "{:,.0f}".format(r.revenue) }}</td>
           <td>{{ r.entry_date }}</td>
           <td>{{ r.status }}</td>
+          <td>{{ r.phone or "—" }}</td>
           <td class="actions-cell">
             <a class="link-btn link-btn--ghost" href="{{ r.url }}" target="_blank" rel="noopener">Registry ↗</a>
             <a class="link-btn link-btn--accent" href="/international/{{ r.registry_code }}?name={{ r.company_name | urlencode }}{% if results_token %}&back={{ results_token }}{% endif %}">🌐 International revenue</a>
@@ -206,6 +239,39 @@
       </tbody>
     </table>
     </div>
+
+    <script>
+    (function () {
+      var state = { phone: "all", intl: "all" };
+      var rows = document.querySelectorAll("#results-table tbody tr");
+      var countEl = document.getElementById("filter-count");
+
+      function apply() {
+        var visible = 0;
+        rows.forEach(function (tr) {
+          var okPhone = state.phone === "all" || tr.dataset.phone === state.phone;
+          var okIntl = state.intl === "all" || tr.dataset.intl === state.intl;
+          var show = okPhone && okIntl;
+          tr.style.display = show ? "" : "none";
+          if (show) visible++;
+        });
+        if (countEl) countEl.textContent = visible + " of " + rows.length + " shown";
+      }
+
+      document.querySelectorAll(".filter-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var group = btn.dataset.filter;
+          state[group] = btn.dataset.value;
+          document.querySelectorAll('.filter-btn[data-filter="' + group + '"]').forEach(function (b) {
+            b.classList.toggle("active", b === btn);
+          });
+          apply();
+        });
+      });
+
+      apply();
+    })();
+    </script>
     {% else %}
     <div class="summary">No companies matched all the chosen filters.</div>
     {% endif %}
