@@ -9,7 +9,7 @@ same request a person clicking around the site would trigger.
 """
 import re
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 
 import requests
 
@@ -21,6 +21,17 @@ USER_AGENT = "Mozilla/5.0 (compatible; EstoniaCompanyFinder/1.0)"
 # The "Müügitulu riikide lõikes" (sales revenue by country) block is
 # report #3 within the finance tab's combined HTML fragment.
 COUNTRY_REVENUE_MARKER = "financereport3_table"
+
+# requests' `timeout=` only bounds each individual socket read — if a
+# server trickles the response slowly enough, a single request can hang
+# far longer than that (seen in practice: one ssb.ee call took 4.5
+# minutes). This shared pool exists purely to put a hard wall-clock cap
+# on a single HTTP call via future.result(timeout=...), regardless of
+# what's happening at the socket level. Abandoned calls keep running in
+# the background (Python can't kill a thread) but self-terminate once
+# their own requests timeout fires, so nothing leaks forever.
+_HTTP_EXECUTOR = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ssb-http")
+_HARD_TIMEOUT = 20  # seconds, wall-clock, no matter what
 
 
 class SsbLookupError(Exception):
@@ -37,8 +48,15 @@ def _fetch_finance_html(registry_code):
         "tab": "finance_raport_html",
         "reg_code": str(registry_code),
     }
+
+    def _do_post():
+        return requests.post(SSB_AJAX_URL, headers=headers, data=data, timeout=15)
+
     try:
-        resp = requests.post(SSB_AJAX_URL, headers=headers, data=data, timeout=30)
+        future = _HTTP_EXECUTOR.submit(_do_post)
+        resp = future.result(timeout=_HARD_TIMEOUT)
+    except FutureTimeoutError:
+        raise SsbLookupError(f"ssb.ee did not respond within {_HARD_TIMEOUT}s.")
     except requests.RequestException as ex:
         raise SsbLookupError(f"Could not reach ssb.ee: {ex}") from ex
 
