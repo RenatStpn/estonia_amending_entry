@@ -20,6 +20,7 @@ _MANUAL_OVERRIDES = {
     "Müük kokku": "Total sales",
     "Eksport kokku": "Total exports",
     "Muud EU sisesed riigid": "Other EU countries",
+    "Muud EU välised riigid": "Other non-EU countries",
     "Muud riigid": "Other countries",
     "Hollandi Antillid": "Netherlands Antilles",
 }

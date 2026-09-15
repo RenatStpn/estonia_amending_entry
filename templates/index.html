@@ -66,11 +66,6 @@
     background: #eaf2ff; border: 1px solid #c3d9f6; color: #1b4f8c;
     padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.92rem;
   }
-  .log {
-    background: #101418; color: #b7f7c1; font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.78rem; padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1rem;
-    max-height: 180px; overflow-y: auto; white-space: pre-wrap;
-  }
   table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; background: white; }
   th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
   th { background: #eef2f5; }
@@ -172,7 +167,7 @@
       Type of entry is fixed to "Amending entry". Revenue comes from the e-Business Register's open annual-report
       data for the selected year — companies that haven't filed a report for that year won't have a revenue figure
       and are excluded. Reference data (~500&nbsp;MB) is downloaded once and cached in <code>data/</code>; the first
-      search for a given year takes longer. Large date ranges can take a while — progress prints below and in the terminal.
+      search for a given year takes longer. Large date ranges can take a while to load.
     </p>
   </form>
 
@@ -182,11 +177,6 @@
 
   {% if summary %}
   <div class="summary">{{ summary }}</div>
-  {% endif %}
-
-  {% if log %}
-  <div class="log">{% for line in log %}{{ line }}
-{% endfor %}</div>
   {% endif %}
 
   {% if results is not none %}
