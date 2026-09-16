@@ -303,6 +303,14 @@
       showLoading("Checking international revenue…");
     });
   });
+
+  // If the browser restores this page from its back/forward cache (e.g.
+  // clicking Back after "International revenue"), it can bring back the
+  // exact DOM state from the moment we left — overlay included — instead
+  // of a fresh load. Always force it hidden whenever the page is shown.
+  window.addEventListener("pageshow", function () {
+    if (overlay) overlay.hidden = true;
+  });
 })();
 </script>
 </body>
