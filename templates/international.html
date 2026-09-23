@@ -49,10 +49,6 @@
     background: #fdecea; border: 1px solid #f3c2bd; color: #8a2c22;
     padding: 0.8rem 1rem; border-radius: 8px; margin-top: 1rem;
   }
-  .note {
-    background: #eaf2ff; border: 1px solid #c3d9f6; color: #1b4f8c;
-    padding: 0.8rem 1rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1.5rem;
-  }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: right; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
@@ -69,12 +65,6 @@
   <a class="link-btn link-btn--ghost back-link" href="{{ '/results/' + back_token if back_token else '/' }}">&larr; Back to search results</a>
   <h1>{{ company_name or "Company" }}</h1>
   <p class="reg-code">Registry code: {{ registry_code }} &middot; International revenue check via ssb.ee</p>
-
-  <div class="note">
-    This data comes from ssb.ee (STORYBOOK / Inforegister), a third-party Estonian business-data provider — not
-    the official Business Register. Figures for the most recent year are typically a forecast (shown in italics
-    below), and companies without filed annual reports may show no breakdown at all.
-  </div>
 
   {% if error %}
   <div class="error">{{ error }}</div>
