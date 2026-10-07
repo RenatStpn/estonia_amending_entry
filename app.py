@@ -237,164 +237,238 @@ def index():
     )
 
 
-@app.route("/search", methods=["POST"])
-def search():
-    start_date_iso = request.form.get("start_date", "").strip()
-    end_date_iso = request.form.get("end_date", "").strip()
-    selected_forms = request.form.getlist("legal_forms") or LEGAL_FORMS
-    year = int(request.form.get("year"))
-    min_revenue_raw = request.form.get("min_revenue", "").strip()
-    max_revenue_raw = request.form.get("max_revenue", "").strip()
+# --- Background search jobs -------------------------------------------------
+# A big search can take minutes (registry pages + per-company phone and
+# international-revenue lookups). Running it inside one HTTP request breaks
+# behind Cloudflare, which cuts any request after ~100s (HTTP 524). So the
+# search runs in a background thread and the browser polls a tiny status
+# endpoint instead. In-memory like RESULTS_STORE, so run a single worker.
+JOBS = OrderedDict()
+JOBS_MAX = 50
+JOBS_LOCK = threading.Lock()
 
-    years = list_available_years() or FALLBACK_YEARS
 
+def _new_job():
+    job_id = uuid.uuid4().hex
+    job = {"state": "running", "message": "Starting…", "url": None, "error": None}
+    with JOBS_LOCK:
+        JOBS[job_id] = job
+        while len(JOBS) > JOBS_MAX:
+            JOBS.popitem(last=False)
+    return job_id, job
+
+
+def _execute_search(params, on_progress):
+    """Runs the whole search and returns the payload shown on /results/<token>.
+    Raises on failure (the caller turns that into a readable message)."""
     log = []
 
     def progress(msg):
         log.append(msg)
         print(msg, flush=True)
+        on_progress(msg)
 
-    error = None
+    year = params["year"]
+    min_revenue = params["min_revenue"]
+    max_revenue = params["max_revenue"]
+    selected_forms = params["selected_forms"]
+
+    entries, total_found, truncated = search_amending_entries(
+        _iso_to_estonian(params["start_date_iso"]),
+        _iso_to_estonian(params["end_date_iso"]),
+        selected_forms,
+        progress_cb=progress,
+    )
+
+    unique_entries = {}
+    for e in entries:
+        unique_entries.setdefault(e["registry_code"], e)
+    unique_entries = list(unique_entries.values())
+    progress(f"{len(unique_entries)} unique companies found with an amending entry in this period.")
+
+    progress(f"Loading {year} revenue data (first run downloads reference data from rik.ee, please wait)...")
+    revenue_map = build_revenue_map(year, progress_cb=progress)
+
     results = []
-    summary = None
+    for e in unique_entries:
+        rev = revenue_map.get(e["registry_code"])
+        if rev is None:
+            continue
+        if min_revenue <= rev <= max_revenue:
+            results.append({
+                "company_name": e["company_name"],
+                "registry_code": e["registry_code"],
+                "revenue": rev,
+                "entry_date": e["entry_date"],
+                "status": e["status"],
+                "url": f"https://ariregister.rik.ee/eng/company/{e['registry_code']}",
+            })
+
+    results.sort(key=lambda r: r["revenue"], reverse=True)
+
+    # Phone number and international-revenue checks are per-company
+    # lookups against other sites, so cap how many results get them.
+    enrich_set = results[:ENRICHMENT_CAP]
+    enrich_note = ""
+    if enrich_set:
+        codes = [r["registry_code"] for r in enrich_set]
+
+        progress(f"Checking phone numbers for {len(codes)} companies...")
+        phones = get_phones(codes, progress_cb=progress)
+
+        progress(f"Checking international revenue for {len(codes)} companies (this can take a while)...")
+        intl_flags = check_export_revenue_bulk(codes, progress_cb=progress)
+
+        for r in enrich_set:
+            r["phone"] = phones.get(r["registry_code"])
+            r["has_international_revenue"] = intl_flags.get(r["registry_code"])
+
+        if len(results) > ENRICHMENT_CAP:
+            enrich_note = f" Phone/international-revenue checks limited to the top {ENRICHMENT_CAP} by revenue."
+    for r in results[ENRICHMENT_CAP:]:
+        r["phone"] = None
+        r["has_international_revenue"] = None
+
+    summary = (
+        f"{total_found} amending entries found in period"
+        + (" (result set was capped — narrow the date range to see all of them)" if truncated else "")
+        + f" → {len(unique_entries)} unique companies → {len(results)} within the chosen revenue range."
+        + enrich_note
+    )
+
     download_token = None
+    if results:
+        export_rows = [
+            {
+                **r,
+                "phone_display": r["phone"] or "",
+                "intl_display": (
+                    "Yes" if r["has_international_revenue"] is True
+                    else "No" if r["has_international_revenue"] is False
+                    else ""
+                ),
+            }
+            for r in results
+        ]
+        df = pd.DataFrame(export_rows)[
+            ["company_name", "registry_code", "revenue", "entry_date", "status",
+             "phone_display", "intl_display", "url"]
+        ]
+        df.columns = [
+            "Company name", "Registry code", f"Revenue {year} (EUR)",
+            "Amending entry date", "Status", "Phone", "Has international revenue", "Register link",
+        ]
+        download_token = uuid.uuid4().hex
+        df.to_excel(os.path.join(OUTPUT_DIR, f"{download_token}.xlsx"), index=False)
+
+    return {
+        "legal_forms": LEGAL_FORMS,
+        "selected_forms": selected_forms,
+        "start_date": params["start_date_iso"],
+        "end_date": params["end_date_iso"],
+        "years": list_available_years() or FALLBACK_YEARS,
+        "selected_year": year,
+        "min_revenue": params["min_revenue_raw"],
+        "max_revenue": params["max_revenue_raw"],
+        "results": results,
+        "summary": summary,
+        "log": log,
+        "download_token": download_token,
+    }
+
+
+def _run_job(job, params):
+    def on_progress(msg):
+        job["message"] = msg
 
     try:
+        payload = _execute_search(params, on_progress)
+        token = _store_results(payload)
+        job["url"] = f"/results/{token}"
+        job["state"] = "done"
+    except EntrySearchError as ex:
+        job["error"] = f"Search failed: {ex}"
+        job["state"] = "error"
+    except ValueError as ex:
+        job["error"] = str(ex)
+        job["state"] = "error"
+    except Exception as ex:  # keep the UI alive with a readable message
+        job["error"] = f"Unexpected error: {ex}"
+        job["state"] = "error"
+
+
+@app.route("/search", methods=["POST"])
+def search():
+    start_date_iso = request.form.get("start_date", "").strip()
+    end_date_iso = request.form.get("end_date", "").strip()
+    selected_forms = request.form.getlist("legal_forms") or LEGAL_FORMS
+    min_revenue_raw = request.form.get("min_revenue", "").strip()
+    max_revenue_raw = request.form.get("max_revenue", "").strip()
+    years = list_available_years() or FALLBACK_YEARS
+
+    # Quick validation up front, so mistakes show on the form immediately
+    # instead of after a background run.
+    try:
+        year = int(request.form.get("year"))
         min_revenue = float(min_revenue_raw) if min_revenue_raw else 0.0
         max_revenue = float(max_revenue_raw) if max_revenue_raw else float("inf")
         if min_revenue > max_revenue:
             raise ValueError("Minimum revenue cannot be greater than maximum revenue.")
-
-        start_date = _iso_to_estonian(start_date_iso)
-        end_date = _iso_to_estonian(end_date_iso)
-
-        entries, total_found, truncated = search_amending_entries(
-            start_date, end_date, selected_forms, progress_cb=progress
+        _iso_to_estonian(start_date_iso)
+        _iso_to_estonian(end_date_iso)
+    except (TypeError, ValueError) as ex:
+        return render_template(
+            "index.html",
+            legal_forms=LEGAL_FORMS,
+            selected_forms=selected_forms,
+            start_date=start_date_iso,
+            end_date=end_date_iso,
+            years=years,
+            selected_year=max(years),
+            min_revenue=min_revenue_raw,
+            max_revenue=max_revenue_raw,
+            results=None,
+            error=str(ex),
+            summary=None,
+            log=None,
+            download_token=None,
+            results_token=None,
         )
 
-        unique_entries = {}
-        for e in entries:
-            unique_entries.setdefault(e["registry_code"], e)
-        unique_entries = list(unique_entries.values())
-        progress(f"{len(unique_entries)} unique companies found with an amending entry in this period.")
+    job_id, job = _new_job()
+    params = {
+        "start_date_iso": start_date_iso,
+        "end_date_iso": end_date_iso,
+        "selected_forms": selected_forms,
+        "year": year,
+        "min_revenue": min_revenue,
+        "max_revenue": max_revenue,
+        "min_revenue_raw": min_revenue_raw,
+        "max_revenue_raw": max_revenue_raw,
+    }
+    threading.Thread(target=_run_job, args=(job, params), daemon=True).start()
+    return redirect(url_for("searching", job_id=job_id))
 
-        progress(f"Loading {year} revenue data (first run downloads reference data from rik.ee, please wait)...")
-        revenue_map = build_revenue_map(year, progress_cb=progress)
 
-        for e in unique_entries:
-            rev = revenue_map.get(e["registry_code"])
-            if rev is None:
-                continue
-            if min_revenue <= rev <= max_revenue:
-                results.append({
-                    "company_name": e["company_name"],
-                    "registry_code": e["registry_code"],
-                    "revenue": rev,
-                    "entry_date": e["entry_date"],
-                    "status": e["status"],
-                    "url": f"https://ariregister.rik.ee/eng/company/{e['registry_code']}",
-                })
+@app.route("/searching/<job_id>")
+def searching(job_id):
+    if not re.match(r"^[a-f0-9]{32}$", job_id):
+        return redirect(url_for("index"))
+    return render_template("searching.html", job_id=job_id)
 
-        results.sort(key=lambda r: r["revenue"], reverse=True)
 
-        # Phone number and international-revenue checks are per-company
-        # lookups against other sites, so cap how many results get them.
-        enrich_set = results[:ENRICHMENT_CAP]
-        enrich_note = ""
-        if enrich_set:
-            codes = [r["registry_code"] for r in enrich_set]
-
-            progress(f"Checking phone numbers for {len(codes)} companies...")
-            phones = get_phones(codes, progress_cb=progress)
-
-            progress(f"Checking international revenue for {len(codes)} companies (this can take a while)...")
-            intl_flags = check_export_revenue_bulk(codes, progress_cb=progress)
-
-            for r in enrich_set:
-                r["phone"] = phones.get(r["registry_code"])
-                r["has_international_revenue"] = intl_flags.get(r["registry_code"])
-
-            if len(results) > ENRICHMENT_CAP:
-                enrich_note = f" Phone/international-revenue checks limited to the top {ENRICHMENT_CAP} by revenue."
-        for r in results[ENRICHMENT_CAP:]:
-            r["phone"] = None
-            r["has_international_revenue"] = None
-
-        summary = (
-            f"{total_found} amending entries found in period"
-            + (" (result set was capped — narrow the date range to see all of them)" if truncated else "")
-            + f" → {len(unique_entries)} unique companies → {len(results)} within the chosen revenue range."
-            + enrich_note
-        )
-
-        if results:
-            export_rows = [
-                {
-                    **r,
-                    "phone_display": r["phone"] or "",
-                    "intl_display": (
-                        "Yes" if r["has_international_revenue"] is True
-                        else "No" if r["has_international_revenue"] is False
-                        else ""
-                    ),
-                }
-                for r in results
-            ]
-            df = pd.DataFrame(export_rows)[
-                ["company_name", "registry_code", "revenue", "entry_date", "status",
-                 "phone_display", "intl_display", "url"]
-            ]
-            df.columns = [
-                "Company name", "Registry code", f"Revenue {year} (EUR)",
-                "Amending entry date", "Status", "Phone", "Has international revenue", "Register link",
-            ]
-            download_token = uuid.uuid4().hex
-            df.to_excel(os.path.join(OUTPUT_DIR, f"{download_token}.xlsx"), index=False)
-
-    except EntrySearchError as ex:
-        error = f"Search failed: {ex}"
-    except ValueError as ex:
-        error = str(ex)
-    except Exception as ex:  # keep the simple UI alive with a readable message
-        error = f"Unexpected error: {ex}"
-
-    if error is None:
-        # Post/Redirect/Get: park the results under a token so they have a
-        # stable URL to come back to (e.g. from an international revenue
-        # check) instead of only existing in this POST response.
-        token = _store_results({
-            "legal_forms": LEGAL_FORMS,
-            "selected_forms": selected_forms,
-            "start_date": start_date_iso,
-            "end_date": end_date_iso,
-            "years": years,
-            "selected_year": year,
-            "min_revenue": min_revenue_raw,
-            "max_revenue": max_revenue_raw,
-            "results": results,
-            "summary": summary,
-            "log": log,
-            "download_token": download_token,
-        })
-        return redirect(url_for("view_results", token=token))
-
-    return render_template(
-        "index.html",
-        legal_forms=LEGAL_FORMS,
-        selected_forms=selected_forms,
-        start_date=start_date_iso,
-        end_date=end_date_iso,
-        years=years,
-        selected_year=year,
-        min_revenue=min_revenue_raw,
-        max_revenue=max_revenue_raw,
-        results=results,
-        error=error,
-        summary=summary,
-        log=log,
-        download_token=download_token,
-        results_token=None,
-    )
+@app.route("/search/status/<job_id>")
+def search_status(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if job is None:
+        return {"state": "missing"}, 404
+    return {
+        "state": job["state"],
+        "message": job["message"],
+        "url": job["url"],
+        "error": job["error"],
+    }
 
 
 @app.route("/results/<token>")
