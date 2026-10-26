@@ -252,6 +252,29 @@
       var state = { phone: "all", intl: "all" };
       var rows = document.querySelectorAll("#results-table tbody tr");
       var countEl = document.getElementById("filter-count");
+      // Remember the chosen filters per results page, so coming back from an
+      // "International revenue" view (or reloading) keeps them applied.
+      var storeKey = "filters:" + location.pathname;
+
+      function save() {
+        try { sessionStorage.setItem(storeKey, JSON.stringify(state)); } catch (e) {}
+      }
+
+      function load() {
+        try {
+          var saved = JSON.parse(sessionStorage.getItem(storeKey) || "null");
+          if (saved) {
+            state.phone = saved.phone || "all";
+            state.intl = saved.intl || "all";
+          }
+        } catch (e) {}
+      }
+
+      function syncButtons() {
+        document.querySelectorAll(".filter-btn").forEach(function (b) {
+          b.classList.toggle("active", state[b.dataset.filter] === b.dataset.value);
+        });
+      }
 
       function apply() {
         var visible = 0;
@@ -263,19 +286,21 @@
           if (show) visible++;
         });
         if (countEl) countEl.textContent = visible + " of " + rows.length + " shown";
+        syncButtons();
       }
 
       document.querySelectorAll(".filter-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          var group = btn.dataset.filter;
-          state[group] = btn.dataset.value;
-          document.querySelectorAll('.filter-btn[data-filter="' + group + '"]').forEach(function (b) {
-            b.classList.toggle("active", b === btn);
-          });
+          state[btn.dataset.filter] = btn.dataset.value;
+          save();
           apply();
         });
       });
 
+      // Also re-apply when the page is restored from the back/forward cache.
+      window.addEventListener("pageshow", function () { load(); apply(); });
+
+      load();
       apply();
     })();
     </script>
