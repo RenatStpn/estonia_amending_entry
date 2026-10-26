@@ -26,6 +26,7 @@ _MANUAL_OVERRIDES = {
     # ssb.ee uses the everyday Estonian name for some countries rather
     # than CLDR's formal one (CLDR has GB as "Ühendkuningriik").
     "Suurbritannia": "United Kingdom",
+    "Leed": "Lithuania",  # ssb.ee shortens Leedu
 }
 
 

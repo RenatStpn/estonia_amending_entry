@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇪🇪</text></svg>">
+<title>Company lookup · Estonia Company Finder</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --blue:#1b4f8c; --border:#d6dde3; --bg:#f5f7f9; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:#1c1c1c; margin:0; padding:2rem 1rem 4rem; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 1rem; }
+  .link-btn { display:inline-flex; align-items:center; gap:.3rem; padding:.32rem .7rem; border-radius:999px; font-size:.8rem; font-weight:600; text-decoration:none; border:1px solid var(--border); white-space:nowrap; }
+  .link-btn--ghost { background:#fff; color:var(--blue); }
+  .link-btn--accent { background:#eef2ff; color:#4338ca; border-color:#d9dcfa; }
+  .link-btn--accent:hover { background:#e1e4fc; }
+  .back { margin-bottom:1rem; }
+  .lookup-row { display:flex; gap:.6rem; margin-bottom:1.2rem; }
+  .lookup-row input { flex:1; padding:.5rem .6rem; border:1px solid var(--border); border-radius:6px; font-size:.95rem; }
+  .lookup-row button { background:var(--blue); color:#fff; border:0; border-radius:6px; padding:.5rem 1.1rem; font-size:.9rem; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--border); border-radius:8px; }
+  th,td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--border); font-size:.9rem; }
+  th { background:#eef2f5; }
+  .muted { color:#778; }
+  .inactive td:first-child { color:#778; }
+  .error { background:#fdecea; border:1px solid #f3c2bd; color:#8a2c22; padding:.8rem 1rem; border-radius:8px; }
+  .note { color:#556; font-size:.9rem; margin-bottom:.8rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="link-btn link-btn--ghost back" href="/">&larr; Back to search</a>
+  <h1>Company lookup</h1>
+  <form method="get" action="/company-search">
+    <div class="lookup-row">
+      <input type="search" name="q" value="{{ q }}" placeholder="Paste a company name or registry code" autocomplete="off" required>
+      <button type="submit">Search</button>
+    </div>
+  </form>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% elif not results %}
+  <div class="note">No company found for “{{ q }}”. Try a shorter part of the name, or the registry code.</div>
+  {% else %}
+  <div class="note">{{ results|length }} match{{ 'es' if results|length != 1 else '' }} for “{{ q }}”{% if results|length >= 25 %} (showing the first 25 — type more of the name to narrow it){% endif %}:</div>
+  <table>
+    <thead><tr><th>Company</th><th>Registry code</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for c in results %}
+      <tr class="{{ '' if c.active else 'inactive' }}">
+        <td>{{ c.name }}</td>
+        <td>{{ c.code }}</td>
+        <td class="{{ '' if c.active else 'muted' }}">{{ c.status }}</td>
+        <td><a class="link-btn link-btn--accent" href="/international/{{ c.code }}?name={{ c.name | urlencode }}">🌐 International revenue</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+</body>
+</html>

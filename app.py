@@ -28,6 +28,7 @@ from flask import (
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import company_lookup
 from entries_search import LEGAL_FORM_VALUES, EntrySearchError, search_amending_entries
 from registry_contact import get_phones
 from revenue_data import build_revenue_map, list_available_years
@@ -484,6 +485,21 @@ def view_results(token):
     )
 
 
+@app.route("/company-search")
+def company_search():
+    q = request.args.get("q", "").strip()
+    results, error = [], None
+    if q:
+        try:
+            results = company_lookup.search(q)
+        except company_lookup.CompanyLookupError as ex:
+            error = str(ex)
+    if len(results) == 1:
+        c = results[0]
+        return redirect(url_for("international", registry_code=c["code"], name=c["name"]))
+    return render_template("company_search.html", q=q, results=results, error=error)
+
+
 @app.route("/international/<registry_code>")
 def international(registry_code):
     if not re.match(r"^\d{6,12}$", registry_code):
@@ -520,6 +536,9 @@ def download(token):
     if not os.path.exists(path):
         return "File not found (it may have expired)", 404
     return send_file(path, as_attachment=True, download_name="estonia_companies.xlsx")
+
+
+company_lookup.warm_up()
 
 
 if __name__ == "__main__":

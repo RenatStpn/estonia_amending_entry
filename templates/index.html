@@ -108,6 +108,10 @@
   .filter-btn:hover { background: #eef2f5; }
   .filter-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
   .filter-count { font-size: 0.8rem; color: #778; margin-left: auto; }
+  form.lookup { margin-bottom: 1rem; }
+  .lookup-row { display: flex; gap: 0.6rem; }
+  .lookup-row input { flex: 1; width: auto; padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; }
+  .lookup-row button { white-space: nowrap; padding: 0.5rem 1.1rem; font-size: 0.9rem; }
   .loading-overlay {
     position: fixed; inset: 0; background: rgba(245, 247, 249, 0.9);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -134,6 +138,14 @@
     Find OÜ / UÜ / TÜ / AS companies with an Amending entry in a chosen period, filtered by yearly revenue.
     {% if session.get('authed') %}<a href="/logout" style="float:right;font-size:0.85rem;color:#1b4f8c;">Log out</a>{% endif %}
   </p>
+
+  <form class="lookup" method="get" action="/company-search">
+    <label for="company_q">Look up one company</label>
+    <div class="lookup-row">
+      <input type="search" id="company_q" name="q" placeholder="Paste a company name or registry code" autocomplete="off" required>
+      <button type="submit">Check international revenue</button>
+    </div>
+  </form>
 
   <form method="post" action="/search">
     <div class="row">
@@ -321,6 +333,12 @@
   if (searchForm) {
     searchForm.addEventListener("submit", function () {
       showLoading("Searching…");
+    });
+  }
+  var lookupForm = document.querySelector('form[action="/company-search"]');
+  if (lookupForm) {
+    lookupForm.addEventListener("submit", function () {
+      showLoading("Looking up…");
     });
   }
   document.querySelectorAll("a.link-btn--accent").forEach(function (a) {
